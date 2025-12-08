@@ -1,4 +1,4 @@
-use bank_system::{Name, Storage};
+use bank_system::storage::{Name, Storage, Balance};
 use std::env;
 
 fn main() {
@@ -28,7 +28,7 @@ fn main() {
                 return;
             }
             let name: Name = args[2].clone();
-            let amount: i64 = args[3].parse().expect("Сумма должна быть числом");
+            let amount = Balance::new(args[3].parse().expect("Сумма должна быть числом"));
 
             // Пытаемся пополнить баланс
             match storage.deposit(&name, amount) {
@@ -46,7 +46,7 @@ fn main() {
                 return;
             }
             let name: Name = args[2].clone();
-            let amount: i64 = args[3].parse().expect("Сумма должна быть числом");
+            let amount= Balance::new(args[3].parse().expect("Сумма должна быть числом"));
 
             // Пытаемся снять деньги
             match storage.withdraw(&name, amount) {

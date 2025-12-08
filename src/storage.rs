@@ -3,9 +3,47 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 use std::fs;
+use std::fmt::Display;
 
 pub type Name = String;
-type Balance = i64;
+enum Operation {
+    Deposit(i64),
+    Withdraw(i64),
+}
+
+#[derive(Copy, Clone, Default, Eq, PartialEq, Debug)]
+pub struct Balance(i64);
+
+impl Balance {
+    pub fn new(init: i64) -> Self {
+        Self(init)
+    }
+
+    pub fn value(&self) -> i64 {
+        self.0
+    }
+
+    fn apply_operations(&mut self, ops: &[Operation]) -> Vec<Operation> {
+        let failed_ops = Vec::new();
+        for op in ops {
+            match op {
+                Operation::Deposit(val) => {
+                    self.0 += val;
+                }
+                Operation::Withdraw(val) => {
+                    self.0 -= val;
+                }
+            }
+        }
+        failed_ops
+    } 
+}
+
+impl Display for Balance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 pub struct Storage {
    accounts: HashMap<Name, Balance>,
@@ -23,8 +61,8 @@ impl Storage {
         if self.accounts.contains_key(&name) {
             None
         } else {
-            self.accounts.insert(name, 0);
-            Some(0)
+            self.accounts.insert(name, Balance::default());
+            Some(Balance::default())
         }
     }
 
@@ -38,7 +76,7 @@ impl Storage {
 
     pub fn deposit(&mut self, name: &Name, amount: Balance) -> Result<(), String> {
         if let Some(balance) = self.accounts.get_mut(name) {
-            *balance += amount;
+            balance.0 += amount.0;
             Ok(())
         } else {
             Err("Пользователь не найден".into())
@@ -47,8 +85,8 @@ impl Storage {
 
     pub fn withdraw(&mut self, name: &Name, amount: Balance) -> Result<(), String> {
         if let Some(balance) = self.accounts.get_mut(name) {
-            if *balance >= amount {
-                *balance -= amount;
+            if balance.0 >= amount.0 {
+                balance.0 -= amount.0;
                 Ok(())
             } else {
                 Err("Недостаточно средств".into())
@@ -58,7 +96,7 @@ impl Storage {
         }
     }
 
-    fn get_all(&self) -> Vec<(Name, i64)> {
+    pub fn get_all(&self) -> Vec<(Name, Balance)> {
         self.accounts.iter().map(|(n, b)| (n.clone(), *b)).collect()
     }
 
@@ -86,7 +124,7 @@ impl Storage {
                     if parts.len() == 2 {
                         let name = parts[0].to_string();
                         // Пробуем преобразовать баланс из строки в число
-                        let balance: i64 = parts[1].parse().unwrap_or(0);
+                        let balance= Balance(parts[1].parse().unwrap_or(0));
 
                         // Добавляем пользователя и выставляем баланс
                         storage.add_user(name.clone());
@@ -132,7 +170,7 @@ mod tests {
     #[test]
     fn test_add_user() {
         let mut storage = Storage::new();
-        assert_eq!(storage.add_user("Alice".to_string()), Some(0)); // новый пользователь
+        assert_eq!(storage.add_user("Alice".to_string()), Some(Balance::default())); // новый пользователь
         assert_eq!(storage.add_user("Alice".to_string()), None); // уже существует
     }
 
@@ -140,9 +178,9 @@ mod tests {
     fn test_remove_user() {
         let mut storage = Storage::new();
         storage.add_user("Bob".to_string());
-        storage.deposit(&"Bob".to_string(), 100).unwrap();
+        storage.deposit(&"Bob".to_string(), Balance(100)).unwrap();
 
-        assert_eq!(storage.remove_user(&"Bob".to_string()), Some(100)); // удаляем и получаем баланс
+        assert_eq!(storage.remove_user(&"Bob".to_string()), Some(Balance(100))); // удаляем и получаем баланс
         assert_eq!(storage.remove_user(&"Bob".to_string()), None); // второй раз — не найден
     }
 
@@ -152,16 +190,16 @@ mod tests {
         storage.add_user("Charlie".to_string());
 
         // Пополнение
-        assert!(storage.deposit(&"Charlie".to_string(), 200).is_ok());
-        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(200));
+        assert!(storage.deposit(&"Charlie".to_string(), Balance(200)).is_ok());
+        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(Balance(200)));
 
         // Успешное снятие
-        assert!(storage.withdraw(&"Charlie".to_string(), 150).is_ok());
-        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(50));
+        assert!(storage.withdraw(&"Charlie".to_string(), Balance(150)).is_ok());
+        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(Balance(50)));
 
         // Ошибка: недостаточно средств
-        assert!(storage.withdraw(&"Charlie".to_string(), 100).is_err());
-        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(50));
+        assert!(storage.withdraw(&"Charlie".to_string(), Balance(100)).is_err());
+        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(Balance(50)));
     }
 
     #[test]
@@ -169,10 +207,10 @@ mod tests {
         let mut storage = Storage::new();
 
         // Депозит несуществующему пользователю
-        assert!(storage.deposit(&"Dana".to_string(), 100).is_err());
+        assert!(storage.deposit(&"Dana".to_string(), Balance(100)).is_err());
 
         // Снятие у несуществующего пользователя
-        assert!(storage.withdraw(&"Dana".to_string(), 50).is_err());
+        assert!(storage.withdraw(&"Dana".to_string(), Balance(50)).is_err());
 
         // Баланс у несуществующего пользователя
         assert_eq!(storage.get_balance(&"Dana".to_string()), None);
@@ -195,15 +233,15 @@ mod tests {
             let parts: Vec<&str> = line.trim().split(',').collect();
             if parts.len() == 2 {
                 let name = parts[0].to_string();
-                let balance: i64 = parts[1].parse().unwrap_or(0);
+                let balance = Balance(parts[1].parse().unwrap_or(0));
                 storage.add_user(name.clone());
                 storage.deposit(&name, balance).unwrap();
             }
         }
 
-        assert_eq!(storage.get_balance(&"John".to_string()), Some(100));
-        assert_eq!(storage.get_balance(&"Alice".to_string()), Some(200));
-        assert_eq!(storage.get_balance(&"Bob".to_string()), Some(50));
+        assert_eq!(storage.get_balance(&"John".to_string()), Some(Balance(100)));
+        assert_eq!(storage.get_balance(&"Alice".to_string()), Some(Balance(200)));
+        assert_eq!(storage.get_balance(&"Bob".to_string()), Some(Balance(50)));
         assert_eq!(storage.get_balance(&"Vasya".to_string()), None); // нет в данных
     }
 
@@ -213,8 +251,8 @@ mod tests {
         let mut storage = Storage::new();
         storage.add_user("John".to_string());
         storage.add_user("Alice".to_string());
-        storage.deposit(&"John".to_string(), 150).unwrap();
-        storage.deposit(&"Alice".to_string(), 300).unwrap();
+        storage.deposit(&"John".to_string(), Balance(150)).unwrap();
+        storage.deposit(&"Alice".to_string(), Balance(300)).unwrap();
 
         // Сохраняем в память через BufWriter
         let buffer = Vec::new();
@@ -233,5 +271,17 @@ mod tests {
         lines.sort(); // сортируем для сравнения
 
         assert_eq!(lines, vec!["Alice,300", "John,150"]);
+    }
+
+    #[test]
+    fn test_apply_operations() {
+        let mut balance = Balance::default();
+        let ops = vec![Operation::Deposit(100),
+                                       Operation::Deposit(200),
+                                       Operation::Withdraw(250)];
+
+        let failed_ops = balance.apply_operations(&ops);
+        assert!(failed_ops.is_empty());
+        assert_eq!(balance, Balance(50));
     }
 }
