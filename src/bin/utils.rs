@@ -1,8 +1,14 @@
-use bank_system::storage::{Name, Storage, Balance};
+use bank_system::storage::{Balance, Name, Storage};
 use std::io::{self, BufRead, Write};
 
 fn main() {
-    let mut storage = Storage::load_data("balance.csv");
+    let mut storage = match Storage::load_data("balance.csv") {
+        Ok(val) => val,
+        Err(e) => {
+            eprintln!("Невозможно загрузить данные {e}");
+            return;
+        }
+    };
 
     println!("=== Bank CLI Utils ===");
     println!("Команды:");
@@ -25,7 +31,7 @@ fn main() {
             break; // EOF
         }
 
-        let args: Vec<&str> = input.trim().split_whitespace().collect();
+        let args: Vec<&str> = input.split_whitespace().collect();
         if args.is_empty() {
             continue;
         }
@@ -47,7 +53,9 @@ fn main() {
                 if storage.add_user(name.clone()).is_some() {
                     let _ = storage.deposit(&name, balance);
                     println!("Пользователь {} добавлен с балансом {}", name, balance);
-                    storage.save("balance.csv");
+                    if let Err(e) = storage.save("balance.csv") {
+                        eprintln!("Невозможно сохранить данные: {e}");
+                    }
                 } else {
                     println!("Пользователь {} уже существует", name);
                 }
@@ -60,7 +68,9 @@ fn main() {
                 let name = args[1];
                 if storage.remove_user(&name.to_string()).is_some() {
                     println!("Пользователь {} удалён", name);
-                    storage.save("balance.csv");
+                    if let Err(e) = storage.save("balance.csv") {
+                        eprintln!("Невозможно сохрнить данные: {e}");
+                    }
                 } else {
                     println!("Пользователь {} не найден", name);
                 }
@@ -71,7 +81,7 @@ fn main() {
                     continue;
                 }
                 let name = args[1].to_string();
-                let amount= match args[2].parse::<i64>() {
+                let amount = match args[2].parse::<i64>() {
                     Ok(a) => Balance::new(a),
                     Err(_) => {
                         println!("Сумма должна быть числом");
@@ -81,7 +91,9 @@ fn main() {
                 match storage.deposit(&name, amount) {
                     Ok(_) => {
                         println!("Баланс пользователя {} увеличен на {}", name, amount);
-                        storage.save("balance.csv");
+                        if let Err(e) = storage.save("balance.csv") {
+                            eprintln!("Невозможно сохрнить данные: {e}");
+                        }
                     }
                     Err(e) => println!("Ошибка: {}", e),
                 }
@@ -102,7 +114,9 @@ fn main() {
                 match storage.withdraw(&name, amount) {
                     Ok(_) => {
                         println!("С баланса пользователя {} снято {}", name, amount);
-                        storage.save("balance.csv");
+                        if let Err(e) = storage.save("balance.csv") {
+                            eprintln!("Невозможно сохрнить данные: {e}");
+                        }
                     }
                     Err(e) => println!("Ошибка: {}", e),
                 }
@@ -113,10 +127,9 @@ fn main() {
                     continue;
                 }
                 let name = args[1].to_string();
-                let amount =
-                if let Some(val) = storage.get_balance(&name) {
+                let amount = if let Some(val) = storage.get_balance(&name) {
                     val
-                }else{
+                } else {
                     println!("Пользователь: {} не найден", name);
                     continue;
                 };
