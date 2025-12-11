@@ -1,9 +1,10 @@
+use super::errors::BankError;
 use std::collections::HashMap;
-use std::path::Path;
-use std::fs::File;
-use std::io::{BufReader, BufRead};
-use std::fs;
 use std::fmt::Display;
+use std::fs;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::Path;
 
 pub type Name = String;
 enum Operation {
@@ -36,7 +37,7 @@ impl Balance {
             }
         }
         failed_ops
-    } 
+    }
 }
 
 impl Display for Balance {
@@ -46,7 +47,7 @@ impl Display for Balance {
 }
 
 pub struct Storage {
-   accounts: HashMap<Name, Balance>,
+    accounts: HashMap<Name, Balance>,
 }
 
 impl Storage {
@@ -74,25 +75,25 @@ impl Storage {
         self.accounts.get(name).copied()
     }
 
-    pub fn deposit(&mut self, name: &Name, amount: Balance) -> Result<(), String> {
+    pub fn deposit(&mut self, name: &Name, amount: Balance) -> Result<(), BankError> {
         if let Some(balance) = self.accounts.get_mut(name) {
             balance.0 += amount.0;
             Ok(())
         } else {
-            Err("Пользователь не найден".into())
+            Err(BankError::UserNotFound)
         }
     }
 
-    pub fn withdraw(&mut self, name: &Name, amount: Balance) -> Result<(), String> {
+    pub fn withdraw(&mut self, name: &Name, amount: Balance) -> Result<(), BankError> {
         if let Some(balance) = self.accounts.get_mut(name) {
             if balance.0 >= amount.0 {
                 balance.0 -= amount.0;
                 Ok(())
             } else {
-                Err("Недостаточно средств".into())
+                Err(BankError::FundsLimit)
             }
         } else {
-            Err("Пользователь не найден".into())
+            Err(BankError::UserNotFound)
         }
     }
 
@@ -101,13 +102,13 @@ impl Storage {
     }
 
     /// Загружает данные из CSV-файла или создаёт хранилище с дефолтными пользователями
-    pub fn load_data(file: &str) -> Storage {
+    pub fn load_data(file: &str) -> Result<Storage, BankError> {
         let mut storage = Storage::new();
 
         // Проверяем, существует ли файл
         if Path::new(file).exists() {
             // Открываем файл
-            let file = File::open(file).unwrap();
+            let file = File::open(file)?;
 
             // Оборачиваем файл в BufReader
             // BufReader читает данные блоками и хранит их в буфере,
@@ -124,7 +125,7 @@ impl Storage {
                     if parts.len() == 2 {
                         let name = parts[0].to_string();
                         // Пробуем преобразовать баланс из строки в число
-                        let balance= Balance(parts[1].parse().unwrap_or(0));
+                        let balance = Balance(parts[1].parse()?);
 
                         // Добавляем пользователя и выставляем баланс
                         storage.add_user(name.clone());
@@ -139,11 +140,11 @@ impl Storage {
             }
         }
 
-        storage
+        Ok(storage)
     }
 
     /// Сохраняет текущее состояние Storage в CSV-файл
-    pub fn save(&self, file: &str) {
+    pub fn save(&self, file: &str) -> Result<(), BankError> {
         let mut data = String::new();
 
         // Собираем все данные в одну строку формата "Name,Balance"
@@ -153,7 +154,8 @@ impl Storage {
 
         // Записываем в файл
         // Здесь мы не используем BufWriter, потому что сразу пишем всю строку целиком.
-        fs::write(file, data).expect("Не удалось записать файл");
+        fs::write(file, data)?;
+        Ok(())
     }
 }
 
@@ -170,7 +172,10 @@ mod tests {
     #[test]
     fn test_add_user() {
         let mut storage = Storage::new();
-        assert_eq!(storage.add_user("Alice".to_string()), Some(Balance::default())); // новый пользователь
+        assert_eq!(
+            storage.add_user("Alice".to_string()),
+            Some(Balance::default())
+        ); // новый пользователь
         assert_eq!(storage.add_user("Alice".to_string()), None); // уже существует
     }
 
@@ -190,16 +195,37 @@ mod tests {
         storage.add_user("Charlie".to_string());
 
         // Пополнение
-        assert!(storage.deposit(&"Charlie".to_string(), Balance(200)).is_ok());
-        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(Balance(200)));
+        assert!(
+            storage
+                .deposit(&"Charlie".to_string(), Balance(200))
+                .is_ok()
+        );
+        assert_eq!(
+            storage.get_balance(&"Charlie".to_string()),
+            Some(Balance(200))
+        );
 
         // Успешное снятие
-        assert!(storage.withdraw(&"Charlie".to_string(), Balance(150)).is_ok());
-        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(Balance(50)));
+        assert!(
+            storage
+                .withdraw(&"Charlie".to_string(), Balance(150))
+                .is_ok()
+        );
+        assert_eq!(
+            storage.get_balance(&"Charlie".to_string()),
+            Some(Balance(50))
+        );
 
         // Ошибка: недостаточно средств
-        assert!(storage.withdraw(&"Charlie".to_string(), Balance(100)).is_err());
-        assert_eq!(storage.get_balance(&"Charlie".to_string()), Some(Balance(50)));
+        assert!(
+            storage
+                .withdraw(&"Charlie".to_string(), Balance(100))
+                .is_err()
+        );
+        assert_eq!(
+            storage.get_balance(&"Charlie".to_string()),
+            Some(Balance(50))
+        );
     }
 
     #[test]
@@ -217,7 +243,7 @@ mod tests {
     }
 
     use std::io::{BufReader, BufWriter};
-    use std::io::{Write, Cursor};
+    use std::io::{Cursor, Write};
 
     #[test]
     fn test_load_data_existing_cursor() {
@@ -240,7 +266,10 @@ mod tests {
         }
 
         assert_eq!(storage.get_balance(&"John".to_string()), Some(Balance(100)));
-        assert_eq!(storage.get_balance(&"Alice".to_string()), Some(Balance(200)));
+        assert_eq!(
+            storage.get_balance(&"Alice".to_string()),
+            Some(Balance(200))
+        );
         assert_eq!(storage.get_balance(&"Bob".to_string()), Some(Balance(50)));
         assert_eq!(storage.get_balance(&"Vasya".to_string()), None); // нет в данных
     }
@@ -276,9 +305,11 @@ mod tests {
     #[test]
     fn test_apply_operations() {
         let mut balance = Balance::default();
-        let ops = vec![Operation::Deposit(100),
-                                       Operation::Deposit(200),
-                                       Operation::Withdraw(250)];
+        let ops = vec![
+            Operation::Deposit(100),
+            Operation::Deposit(200),
+            Operation::Withdraw(250),
+        ];
 
         let failed_ops = balance.apply_operations(&ops);
         assert!(failed_ops.is_empty());

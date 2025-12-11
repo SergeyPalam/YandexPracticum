@@ -1,11 +1,17 @@
-use bank_system::storage::{Name, Storage, Balance};
+use bank_system::storage::{Balance, Name, Storage};
 use std::env;
 
 fn main() {
     // Загружаем текущее состояние банка из CSV-файла
     // Здесь демонстрация использования BufRead в методе load_data()
     // Файл читается построчно, и каждая строка преобразуется в (Name, Balance)
-    let mut storage = Storage::load_data("balance.csv");
+    let mut storage = match Storage::load_data("balance.csv") {
+        Ok(val) => val,
+        Err(e) => {
+            eprintln!("Невозможно загрузить данные из файла: {e}");
+            return;
+        }
+    };
 
     // Получаем аргументы командной строки
     let args: Vec<String> = env::args().collect();
@@ -35,7 +41,9 @@ fn main() {
                 Ok(_) => {
                     println!("Пополнено: {} на {}", name, amount);
                     // После изменения баланса сохраняем новое состояние в CSV
-                    storage.save("balance.csv");
+                    if let Err(e) = storage.save("balance.csv") {
+                        eprintln!("Невозможно сохранить данные в файл: {e}");
+                    }
                 }
                 Err(e) => println!("Ошибка: {}", e),
             }
@@ -46,14 +54,16 @@ fn main() {
                 return;
             }
             let name: Name = args[2].clone();
-            let amount= Balance::new(args[3].parse().expect("Сумма должна быть числом"));
+            let amount = Balance::new(args[3].parse().expect("Сумма должна быть числом"));
 
             // Пытаемся снять деньги
             match storage.withdraw(&name, amount) {
                 Ok(_) => {
                     println!("Снято: {} на {}", name, amount);
                     // Сохраняем изменения
-                    storage.save("balance.csv");
+                    if let Err(e) = storage.save("balance.csv") {
+                        eprintln!("Невозможно сохранить данные в файл: {e}");
+                    }
                 }
                 Err(e) => println!("Ошибка: {}", e),
             }
