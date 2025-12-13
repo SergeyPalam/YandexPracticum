@@ -1,4 +1,5 @@
 use bank_system::storage::{Balance, Name, Storage};
+use bank_system::transaction::{Transaction, Deposit, Withdraw, Transfer};
 use std::io::{self, BufRead, Write};
 
 fn main() {
@@ -81,21 +82,51 @@ fn main() {
                     continue;
                 }
                 let name = args[1].to_string();
-                let amount = match args[2].parse::<i64>() {
-                    Ok(a) => Balance::new(a),
+                let amount: i64 = match args[2].parse() {
+                    Ok(a) => a,
                     Err(_) => {
                         println!("Сумма должна быть числом");
                         continue;
                     }
                 };
-                match storage.deposit(&name, amount) {
+
+                let tx = Deposit::new(&name, Balance::new(amount));
+                // Применяем транзакцию 
+                match tx.apply(&mut storage) {
                     Ok(_) => {
-                        println!("Баланс пользователя {} увеличен на {}", name, amount);
+                        println!("Транзакция: депозит {} на {}", name, amount);
                         if let Err(e) = storage.save("balance.csv") {
                             eprintln!("Невозможно сохрнить данные: {e}");
                         }
                     }
-                    Err(e) => println!("Ошибка: {}", e),
+                    Err(e) => println!("Ошибка транзакции: {:?}", e),
+                }
+            }
+            "transfer" => {
+                if args.len() != 4 {
+                    println!("Пример: tx_transfer Alice Bob 50");
+                    continue;
+                }
+                let from = args[1].to_string();
+                let to = args[2].to_string();
+                let amount: i64 = match args[3].parse() {
+                    Ok(a) => a,
+                    Err(_) => {
+                        println!("Сумма должна быть числом");
+                        continue;
+                    }
+                };
+
+                let tx = Transfer::new(&from, &to, Balance::new(amount));
+                // Применяем транзакцию 
+                match tx.apply(&mut storage) {
+                    Ok(_) => {
+                        println!("Транзакция: перевод средств {} от {} на {}", amount, from, to);
+                        if let Err(e) = storage.save("balance.csv") {
+                            eprintln!("Невозможно сохрнить данные: {e}");
+                        }
+                    }
+                    Err(e) => println!("Ошибка транзакции: {:?}", e),
                 }
             }
             "withdraw" => {
@@ -111,14 +142,16 @@ fn main() {
                         continue;
                     }
                 };
-                match storage.withdraw(&name, amount) {
+                let tx = Withdraw::new(&name, amount);
+                // Применяем транзакцию 
+                match tx.apply(&mut storage) {
                     Ok(_) => {
-                        println!("С баланса пользователя {} снято {}", name, amount);
+                        println!("Транзакция: депозит {} на {}", name, amount);
                         if let Err(e) = storage.save("balance.csv") {
                             eprintln!("Невозможно сохрнить данные: {e}");
                         }
                     }
-                    Err(e) => println!("Ошибка: {}", e),
+                    Err(e) => println!("Ошибка транзакции: {:?}", e),
                 }
             }
             "balance" => {
@@ -134,6 +167,50 @@ fn main() {
                     continue;
                 };
                 println!("Баланс пользователя {} = {}", name, amount);
+            }
+            "+" => {
+                if args.len() != 8 {
+                    println!(
+                        "Пример: + deposit Alice 100 transfer Alice Bob 30: cur {}",
+                        args.len()
+                    );
+                    continue;
+                }
+
+                let name = args[2].to_string();
+                let amount: i64 = match args[3].parse() {
+                    Ok(a) => a,
+                    Err(_) => {
+                        println!("Сумма должна быть числом");
+                        continue;
+                    }
+                };
+
+                let deposit = Deposit::new(&name, Balance::new(amount));
+
+                let from = args[5].to_string();
+                let to = args[6].to_string();
+                let amount: i64 = match args[7].parse() {
+                    Ok(a) => a,
+                    Err(_) => {
+                        println!("Сумма должна быть числом");
+                        continue;
+                    }
+                };
+
+                let transfer = Transfer::new(&from, &to, Balance::new(amount));
+
+                // Здесь мы используем оператор +
+                let combined_tx = deposit + transfer;
+
+                match combined_tx.apply(&mut storage) {
+                    Ok(_) => println!("Транзакции выполнены!"),
+                    Err(e) => println!("Ошибка при выполнении: {:?}", e),
+                }
+
+                if let Err(e) = storage.save("balance.csv") {
+                    eprintln!("Невозможно сохрнить данные: {e}");
+                }
             }
             "exit" => break,
             _ => println!("Неизвестная команда"),
