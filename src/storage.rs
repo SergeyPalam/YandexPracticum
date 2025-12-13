@@ -1,9 +1,11 @@
 use super::errors::BankError;
+use super::transaction::Transaction;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::ops::{AddAssign, SubAssign, Add};
 use std::path::Path;
 
 pub type Name = String;
@@ -12,7 +14,7 @@ enum Operation {
     Withdraw(i64),
 }
 
-#[derive(Copy, Clone, Default, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Default, Eq, PartialEq, Debug, PartialOrd, Ord)]
 pub struct Balance(i64);
 
 impl Balance {
@@ -43,6 +45,18 @@ impl Balance {
 impl Display for Balance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl AddAssign for Balance {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
+    }
+}
+
+impl SubAssign for Balance {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0 -= rhs.0;
     }
 }
 
